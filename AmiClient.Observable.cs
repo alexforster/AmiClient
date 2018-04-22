@@ -1,4 +1,4 @@
-﻿/* Copyright © 2017 Alex Forster. All rights reserved.
+﻿/* Copyright © 2018 Alex Forster. All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ namespace Ami
                 throw new ArgumentNullException(nameof(observer));
             }
 
-            this.observers.TryRemove(observer, out var subscription);
+            this.observers.TryRemove(observer, out _);
         }
 
         public void Dispose()

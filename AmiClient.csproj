@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -14,7 +14,7 @@
     <Title>AmiClient</Title>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <LangVersion>7.1</LangVersion>
+    <LangVersion>7</LangVersion>
     <DebugType>full</DebugType>
     <DocumentationFile>bin\Debug\netcoreapp2.0\AmiClient.xml</DocumentationFile>
   </PropertyGroup>
@@ -26,7 +26,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Reactive.Interfaces" Version="3.1.1" />
-    <PackageReference Include="NuGet.Build.Packaging" Version="0.2.1" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
