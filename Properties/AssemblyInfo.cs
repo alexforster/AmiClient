@@ -1,4 +1,5 @@
 ﻿/* Copyright © 2019 Alex Forster. All rights reserved.
+ * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +21,7 @@ using System.Reflection;
 [assembly: AssemblyProduct("AmiClient")]
 [assembly: AssemblyCopyright("Copyright © 2019 Alex Forster. All rights reserved.")]
 
-[assembly: AssemblyVersion("1.1.0")]
+[assembly: AssemblyVersion("1.2.0")]
 
 #if DEBUG
 [assembly: AssemblyConfiguration("Debug")]
