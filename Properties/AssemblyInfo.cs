@@ -21,7 +21,7 @@ using System.Reflection;
 [assembly: AssemblyProduct("AmiClient")]
 [assembly: AssemblyCopyright("Copyright © 2019 Alex Forster. All rights reserved.")]
 
-[assembly: AssemblyVersion("1.2.1")]
+[assembly: AssemblyVersion("1.2.2")]
 
 #if DEBUG
 [assembly: AssemblyConfiguration("Debug")]
