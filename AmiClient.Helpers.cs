@@ -1,4 +1,5 @@
 /* Copyright © 2019 Alex Forster. All rights reserved.
+ * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +27,8 @@ namespace Ami
 	using System.Linq;
 	using System.Reactive.Linq;
 	using System.Security.Cryptography;
+
+	using ByteArrayExtensions;
 
 	public sealed partial class AmiClient
 	{

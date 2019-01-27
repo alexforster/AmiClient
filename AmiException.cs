@@ -1,4 +1,4 @@
-﻿/* Copyright © 2019 Alex Forster. All rights reserved.
+/* Copyright © 2019 Alex Forster. All rights reserved.
  * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-using System;
-using System.Reflection;
+namespace Ami
+{
+	using System;
 
-[assembly: AssemblyTitle("AmiClient")]
-[assembly: AssemblyProduct("AmiClient")]
-[assembly: AssemblyCopyright("Copyright © 2019 Alex Forster. All rights reserved.")]
+	public sealed class AmiException : Exception
+	{
+		public AmiException(String message) : base(message)
+		{
+		}
 
-[assembly: AssemblyVersion("1.2.0")]
-
-#if DEBUG
-[assembly: AssemblyConfiguration("Debug")]
-#else
-[assembly: AssemblyConfiguration("Release")]
-#endif
+		public AmiException(String message, Exception innerException) : base(message, innerException)
+		{
+		}
+	}
+}

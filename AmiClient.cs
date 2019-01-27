@@ -1,4 +1,5 @@
 /* Copyright © 2019 Alex Forster. All rights reserved.
+ * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +25,7 @@ namespace Ami
 	using System.Threading;
 	using System.Threading.Tasks;
 	using System.Linq;
+	using System.Reactive;
 	using System.Reactive.Linq;
 	using System.Security.Cryptography;
 
@@ -31,52 +33,66 @@ namespace Ami
 
 	public sealed partial class AmiClient
 	{
-		private readonly Stream stream;
+		private Stream stream;
+
+		public Stream Stream
+		{
+			get => this.stream;
+
+			set
+			{
+				if(this.stream != null)
+				{
+					throw new ArgumentException("\"Stream\" property has already been set", nameof(value));
+				}
+
+				if(!value.CanRead)
+				{
+					throw new ArgumentException("stream does not support reading", nameof(value));
+				}
+
+				if(!value.CanWrite)
+				{
+					throw new ArgumentException("stream does not support writing", nameof(value));
+				}
+
+				this.stream = value;
+
+				Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
+
+				var oneSecondFromNow = DateTimeOffset.Now.AddSeconds(1);
+
+				while(!this.processing && DateTimeOffset.Now < oneSecondFromNow)
+				{
+					Thread.Yield();
+				}
+
+				if(!this.processing)
+				{
+					throw new AmiException("could not exchange the AMI protocol banner");
+				}
+			}
+		}
+
+		public AmiClient()
+		{
+		}
 
 		public AmiClient(Stream stream)
 		{
-			this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
-
-			Debug.Assert(stream.CanRead);
-			Debug.Assert(stream.CanWrite);
-
-			var lineObserver = this.ReadLines().ToObservable();
-			var line = lineObserver.Take(1).Wait();
-
-			if(String.IsNullOrEmpty(line))
-			{
-				throw new Exception($"this does not appear to be an Asterisk server ({line})");
-			}
-
-			this.DataReceived?.Invoke(this, new DataEventArgs(line + "\x0d\x0a"));
-
-			if(!line.StartsWith("Asterisk Call Manager", StringComparison.OrdinalIgnoreCase))
-			{
-				throw new Exception($"this does not appear to be an Asterisk server ({line})");
-			}
-
-			Task.Run(this.WorkerMain);
+			this.Stream = stream;
 		}
-
-		public sealed class DataEventArgs : EventArgs
-		{
-			public readonly String Data;
-
-			internal DataEventArgs(String data)
-			{
-				this.Data = data;
-			}
-		}
-
-		public event EventHandler<DataEventArgs> DataSent;
-
-		public event EventHandler<DataEventArgs> DataReceived;
 
 		private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight =
 			new ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>>(StringComparer.OrdinalIgnoreCase);
 
 		public async Task<AmiMessage> Publish(AmiMessage action)
 		{
+			if(this.stream == null)
+			{
+				throw new InvalidOperationException("\"Stream\" property has not been set");
+			}
+
 			try
 			{
 				var tcs = new TaskCompletionSource<AmiMessage>(TaskCreationOptions.AttachedToParent);
@@ -85,9 +101,12 @@ namespace Ami
 
 				var buffer = action.ToBytes();
 
-				await this.stream.WriteAsync(buffer, 0, buffer.Length);
+				lock(this.stream)
+				{
+					this.stream.Write(buffer, 0, buffer.Length);
+				}
 
-				this.DataSent?.Invoke(this, new DataEventArgs(action.ToString()));
+				this.DataSent?.Invoke(this, new DataEventArgs(buffer));
 
 				var response = await tcs.Task;
 
@@ -107,10 +126,8 @@ namespace Ami
 
 		private Byte[] readBuffer = new Byte[0];
 
-		private IEnumerable<String> ReadLines()
+		private IEnumerable<Byte[]> LineObserver()
 		{
-			var needle = new Byte[] { 0x0d, 0x0a };
-
 			while(true)
 			{
 				if(!this.readBuffer.Any())
@@ -123,42 +140,49 @@ namespace Ami
 					}
 					this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
 				}
-				while(true)
+
+				while(this.readBuffer.Any())
 				{
-					var crlfPos = this.readBuffer.Find(needle, 0, this.readBuffer.Length);
-					if(crlfPos == -1)
-					{
-						break;
-					}
-					var line = this.readBuffer.Slice(0, crlfPos);
-					this.readBuffer = this.readBuffer.Slice(crlfPos + needle.Length);
-					yield return Encoding.UTF8.GetString(line);
+					var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
+					Debug.Assert(crlfPos != -1);
+					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
+					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
+					yield return line;
 				}
 			}
 		}
 
-		private Boolean processing = true;
+		private Boolean processing;
 
 		private async Task WorkerMain()
 		{
 			try
 			{
-				var lineObserver = this.ReadLines().ToObservable();
+				var lineObserver = this.LineObserver().ToObservable();
+
+				var handshake = await lineObserver.Take(1);
+
+				this.DataReceived?.Invoke(this, new DataEventArgs(handshake));
+
+				this.processing = true;
+
+				if(!Encoding.UTF8.GetString(handshake)
+				            .StartsWith("Asterisk Call Manager", StringComparison.OrdinalIgnoreCase))
+				{
+					throw new AmiException("protocol handshake failed (is this an Asterisk server?)");
+				}
 
 				while(this.processing)
 				{
-					var message = new AmiMessage();
+					var payload = new Byte[0];
 
 					await lineObserver
-					     .TakeWhile(line => line != String.Empty)
-					     .Do(line =>
-					      {
-						      var kv = line.Split(new[] { ':' }, 2);
-						      Debug.Assert(kv.Length == 2);
-						      message.Add(kv[0], kv[1]);
-					      });
+					     .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
+					     .Do(line => payload = payload.Append(line));
 
-					this.DataReceived?.Invoke(this, new DataEventArgs(message.ToString()));
+					this.DataReceived?.Invoke(this, new DataEventArgs(payload));
+
+					var message = AmiMessage.FromBytes(payload);
 
 					if(message["Response"] != null && this.inFlight.TryGetValue(message["ActionID"], out var tcs))
 					{

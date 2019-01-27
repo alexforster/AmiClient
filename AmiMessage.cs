@@ -1,4 +1,5 @@
 /* Copyright © 2019 Alex Forster. All rights reserved.
+ * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +23,8 @@ namespace Ami
 	using System.Collections.Generic;
 	using System.Linq;
 
+	using ByteArrayExtensions;
+
 	public sealed partial class AmiMessage : IEnumerable<KeyValuePair<String, String>>
 	{
 		public readonly List<KeyValuePair<String, String>> Fields = new List<KeyValuePair<String, String>>();
@@ -30,7 +33,7 @@ namespace Ami
 
 		public AmiMessage()
 		{
-			this.Timestamp = DateTimeOffset.Now;
+			this.Timestamp = DateTimeOffset.UtcNow;
 		}
 
 		public String this[String key]
@@ -39,7 +42,7 @@ namespace Ami
 			{
 				if(String.IsNullOrWhiteSpace(key))
 				{
-					throw new ArgumentException(nameof(key));
+					throw new ArgumentException("value cannot be null or whitespace", nameof(key));
 				}
 
 				return this.Fields
@@ -50,14 +53,24 @@ namespace Ami
 
 			private set
 			{
-				if(String.IsNullOrWhiteSpace(key) || key.IndexOfAny(new[] { '\r', '\n' }) != -1)
+				if(String.IsNullOrWhiteSpace(key))
 				{
-					throw new ArgumentException(nameof(key));
+					throw new ArgumentException("key cannot be null or whitespace", nameof(key));
 				}
 
-				if(value == null || value.IndexOfAny(new[] { '\r', '\n' }) != -1)
+				if(key.IndexOfAny(AmiMessage.TerminatorChars) != -1)
 				{
-					throw new ArgumentException(nameof(value));
+					throw new ArgumentException("key cannot contain newline characters", nameof(key));
+				}
+
+				if(value == null)
+				{
+					throw new ArgumentNullException(nameof(value));
+				}
+
+				if(value.IndexOfAny(AmiMessage.TerminatorChars) != -1)
+				{
+					throw new ArgumentException("value cannot contain newline characters", nameof(value));
 				}
 
 				key = key.Trim();
@@ -80,6 +93,15 @@ namespace Ami
 					// only if an ActionID has not already been set
 
 					this.Fields.Add(new KeyValuePair<String, String>("ActionID", Guid.NewGuid().ToString("D")));
+				}
+
+				if(key.Equals("Timestamp", StringComparison.OrdinalIgnoreCase))
+				{
+					if(Double.TryParse(value, out var seconds))
+					{
+						var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+						this.Timestamp = dt.AddSeconds(seconds);
+					}
 				}
 			}
 		}
