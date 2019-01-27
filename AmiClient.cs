@@ -17,7 +17,6 @@
 namespace Ami
 {
 	using System;
-	using System.Diagnostics;
 	using System.IO;
 	using System.Text;
 	using System.Collections.Generic;
@@ -25,7 +24,6 @@ namespace Ami
 	using System.Threading;
 	using System.Threading.Tasks;
 	using System.Linq;
-	using System.Reactive;
 	using System.Reactive.Linq;
 	using System.Security.Cryptography;
 
@@ -74,17 +72,26 @@ namespace Ami
 			}
 		}
 
+		private readonly ConcurrentDictionary<IObserver<AmiMessage>, Subscription> observers;
+
+		private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight;
+
 		public AmiClient()
 		{
+			this.observers = new ConcurrentDictionary<IObserver<AmiMessage>, Subscription>(
+				Environment.ProcessorCount,
+				65536);
+
+			this.inFlight = new ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>>(
+				Environment.ProcessorCount,
+				16384,
+				StringComparer.OrdinalIgnoreCase);
 		}
 
-		public AmiClient(Stream stream)
+		public AmiClient(Stream stream) : this()
 		{
 			this.Stream = stream;
 		}
-
-		private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight =
-			new ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>>(StringComparer.OrdinalIgnoreCase);
 
 		public async Task<AmiMessage> Publish(AmiMessage action)
 		{
@@ -97,7 +104,10 @@ namespace Ami
 			{
 				var tcs = new TaskCompletionSource<AmiMessage>(TaskCreationOptions.AttachedToParent);
 
-				Debug.Assert(this.inFlight.TryAdd(action["ActionID"], tcs));
+				if(!this.inFlight.TryAdd(action["ActionID"], tcs))
+				{
+					throw new AmiException("a message with the same ActionID is already in flight");
+				}
 
 				var buffer = action.ToBytes();
 
@@ -110,7 +120,7 @@ namespace Ami
 
 				var response = await tcs.Task;
 
-				Debug.Assert(this.inFlight.TryRemove(response["ActionID"], out _));
+				this.inFlight.TryRemove(response["ActionID"], out _);
 
 				return response;
 			}
@@ -118,7 +128,7 @@ namespace Ami
 			{
 				this.Dispatch(ex);
 
-				Debug.Assert(this.inFlight.TryRemove(action["ActionID"], out _));
+				this.inFlight.TryRemove(action["ActionID"], out _);
 
 				return null;
 			}
@@ -144,11 +154,15 @@ namespace Ami
 				while(this.readBuffer.Any())
 				{
 					var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
-					Debug.Assert(crlfPos != -1);
+					if(crlfPos == -1)
+					{
+						goto CONTINUE;
+					}
 					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
 					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
 					yield return line;
 				}
+				CONTINUE: ;
 			}
 		}
 
@@ -186,7 +200,7 @@ namespace Ami
 
 					if(message["Response"] != null && this.inFlight.TryGetValue(message["ActionID"], out var tcs))
 					{
-						Debug.Assert(tcs.TrySetResult(message));
+						tcs.SetResult(message);
 					}
 					else
 					{
