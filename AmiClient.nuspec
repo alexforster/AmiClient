@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <metadata>
+        <id>AmiClient</id>
+        <version>1.2.1</version>
+        <description>Asterisk Management Interface (AMI) client library for .NET</description>
+        <copyright>Copyright © 2019 Alex Forster. All rights reserved.</copyright>
+        <authors>alexforster</authors>
+        <tags>asterisk asterisk-ami asterisk-pbx voip sip csharp csharp-library netstandard netcore</tags>
+        <projectUrl>https://github.com/alexforster/AmiClient/tree/v1.2.1</projectUrl>
+        <license type="expression">Apache-2.0</license>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <dependencies>
+            <dependency id="NETStandard.Library" version="2.0.3" />
+            <dependency id="System.Reactive.Interfaces" version="4.1.2" />
+        </dependencies>
+    </metadata>
+</package>

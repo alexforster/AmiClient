@@ -1,37 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <PackOnBuild>true</PackOnBuild>
-    <Authors>alexforster</Authors>
-    <Owners>alexforster</Owners>
-    <Description>Asterisk Management Interface (AMI) client library for .NET</Description>
-    <PackageId>AmiClient</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
-    <PackageLicenseUrl>http://www.apache.org/licenses/LICENSE-2.0</PackageLicenseUrl>
-    <PackageProjectUrl>https://github.com/alexforster/AmiClient/tree/v1.0.0</PackageProjectUrl>
-    <PackageTags>asterisk voip sip netstandard netcore</PackageTags>
-    <Title>AmiClient</Title>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <LangVersion>7.3</LangVersion>
     <DebugType>full</DebugType>
-    <DocumentationFile>
-    </DocumentationFile>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <LangVersion>7.1</LangVersion>
-    <DebugType>full</DebugType>
-    <DocumentationFile>
-    </DocumentationFile>
+    <LangVersion>7.3</LangVersion>
+    <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Remove="AmiClient.nuspec" />
-    <None Remove="AmiClient.1.0.0.nupkg" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Reactive.Interfaces" Version="4.1.2" />
