@@ -2,6 +2,9 @@
 
 Asterisk Management Interface (AMI) client library for .NET
 
+ * https://github.com/alexforster/AmiClient/
+ * https://www.nuget.org/packages/AmiClient
+
 **Features**
 
  * Designed to be used with `async/await`
@@ -23,29 +26,33 @@ Here's an easy way to set up an Asterisk 13 development environment:
  2. Add a `manager.conf` file to your basic Asterisk configuration directory to enable the Asterisk Management Interface...
 
 ```
+cat << EOF > ~/Desktop/etc-asterisk/manager.conf
 ; manager.conf
 
 [general]
 enabled = yes
 bindaddr = 0.0.0.0
 port = 5038
+timestampevents = yes ; (optional but helpful)
 
 [admin]
 secret = amp111
 read = all
 write = all
+
+EOF
 ```
 
  3. Run a local Asterisk 13 Docker container...
 
 ```bash
 docker run -dit --rm --privileged \
-           --name asterisk13-dev \
-           -p 5060:5060 -p 5060:5060/udp \
-           -p 10000-10500:10000-10500/udp \
-           -p 5038:5038 \
-           -v ~/Desktop/etc-asterisk:/etc/asterisk \
-           asterisk13
+         --name asterisk13-dev \
+         -p 5060:5060 -p 5060:5060/udp \
+         -p 10000-10500:10000-10500/udp \
+         -p 5038:5038 \
+         -v ~/Desktop/etc-asterisk:/etc/asterisk \
+         asterisk13
 ```
 
  4. Use the example code below as a starting point for learning the *AmiClient* API...
@@ -54,7 +61,6 @@ docker run -dit --rm --privileged \
 
 ```csharp
 using System;
-using System.Diagnostics;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
@@ -65,79 +71,84 @@ namespace Playground
 {
    internal static class Program
    {
-      public static async Task Main(String[] args)
-      {
-         // To make testing possible, an AmiClient accepts any Stream object
-         // that is readable and writable. This means that the user is
-         // responsible for maintaining a TCP connection to the AMI server.
+     public static async Task Main(String[] args)
+     {
+       // To make testing possible, an AmiClient accepts any Stream object
+       // that is readable and writable. This means that the user is
+       // responsible for maintaining a TCP connection to the AMI server.
 
-         // It's actually pretty easy...
+       // It's actually pretty easy...
 
-         using(var socket = new TcpClient(hostname: "127.0.0.1", port: 5038))
-         using(var client = new AmiClient(socket.GetStream()))
+       using(var socket = new TcpClient(hostname: "127.0.0.1", port: 5038))
+       using(var client = new AmiClient(socket.GetStream()))
+       {
+         // At this point, we've completed the AMI protocol handshake and
+         // a background I/O Task is consuming data from the socket.
+
+         // Activity on the wire can be observed and logged using the
+         // DataSent and DataReceived events...
+
+         client.DataSent += (s, e) => Console.Error.Write(e.Data);
+         client.DataReceived += (s, e) => Console.Error.Write(e.Data);
+
+         // First, let's authenticate using the Login() helper function...
+
+         if(!await client.Login(username: "admin", secret: "amp111", md5: true))
          {
-            // At this point we're connected and we've completed the AMI
-            // protocol handshake.
-
-            // Activity on the wire can be observed and logged using the
-            // DataSent and DataReceived events...
-
-            client.DataSent += (s, e) => Console.Error.Write(e.Data);
-            client.DataReceived += (s, e) => Console.Error.Write(e.Data);
-
-            // First, let's authenticate using the Login() helper function...
-
-            if(!await client.Login(username: "admin", secret: "amp111", md5: true))
-            {
-               Console.WriteLine("Login failed");
-               return;
-            }
-
-            // Now let's issue a PJSIPShowEndpoints command...
-
-            var response = await client.Publish(new AmiMessage
-            {
-               { "Action", "PJSIPShowEndpoints" },
-            });
-
-            // Because we didn't specify an ActionID, one was implicitly
-            // created for us by the Publish() method. That's how we track
-            // requests and responses, allowing this client to be used
-            // by multiple threads or tasks.
-
-            if(response["Response"] == "Success")
-            {
-               // After the PJSIPShowEndpoints command successfully executes,
-               // Asterisk will begin emitting EndpointList events.
-
-               // Each EndpointList event represents a single PJSIP endpoint,
-               // and has the same ActionID as the PJSIPShowEndpoints command
-               // that caused it.
-
-               // Once events have been emitted for all PJSIP endpoints,
-               // an EndpointListComplete event will be emitted, again with
-               // the same ActionID as the PJSIPShowEndpoints command
-               // that caused it.
-
-               // Using System.Reactive.Linq, all of that can be modeled with
-               // a simple Rx IObservable consumer...
-
-               await client
-                    .Where(message => message["ActionID"] == response["ActionID"])
-                    .TakeWhile(message => message["Event"] != "EndpointListComplete")
-                    .Do(message => Console.Out.WriteLine($"~~~ \"{message["ObjectName"]}\" ({message["DeviceState"]}) ~~~"));
-            }
-
-            // We're done, so let's be a good client and use the Logoff()
-            // helper function...
-
-            if(!await client.Logoff())
-            {
-               Console.WriteLine("Logoff failed");
-               return;
-            }
+            Console.WriteLine("Login failed");
+            return;
          }
-      }
+
+         // In case the Asterisk server hasn't finished booting, let's wait
+         // until it's ready...
+
+         await client.Where(message => message["Event"] == "FullyBooted").FirstAsync();
+
+         // Now let's issue a PJSIPShowEndpoints command...
+
+         var response = await client.Publish(new AmiMessage
+         {
+            { "Action", "PJSIPShowEndpoints" },
+         });
+
+         // Because we didn't specify an ActionID, one was implicitly
+         // created for us by the AmiMessage object. That's how we track
+         // requests and responses, allowing this client to be used
+         // by multiple threads or tasks.
+
+         if(response["Response"] == "Success")
+         {
+            // After the PJSIPShowEndpoints command successfully executes,
+            // Asterisk will begin emitting EndpointList events.
+
+            // Each EndpointList event represents a single PJSIP endpoint,
+            // and has the same ActionID as the PJSIPShowEndpoints command
+            // that caused it.
+
+            // Once events have been emitted for all PJSIP endpoints,
+            // an EndpointListComplete event will be emitted, again with
+            // the same ActionID as the PJSIPShowEndpoints command
+            // that caused it.
+
+            // Using System.Reactive.Linq, all of that can be modeled with
+            // a simple Rx IObservable consumer...
+
+            await client
+               .Where(message => message["ActionID"] == response["ActionID"])
+               .TakeWhile(message => message["Event"] != "EndpointListComplete")
+               .Do(message => Console.Out.WriteLine($"~~~ \"{message["ObjectName"]}\" ({message["DeviceState"]}) ~~~"));
+         }
+
+         // We're done, so let's be a good client and use the Logoff()
+         // helper function...
+
+         if(!await client.Logoff())
+         {
+            Console.WriteLine("Logoff failed");
+            return;
+         }
+       }
+     }
    }
 }
 ```
@@ -146,50 +157,50 @@ namespace Playground
 
 ```
 Action: Challenge
-ActionID: 2983f6de-0248-4697-a460-2d5249f7f7c2
+ActionID: 24871f64-ca7e-4dfb-a67f-734ba3893efb
 AuthType: MD5
 
 Response: Success
-ActionID: 2983f6de-0248-4697-a460-2d5249f7f7c2
-Challenge: 186191623
+ActionID: 24871f64-ca7e-4dfb-a67f-734ba3893efb
+Challenge: 158303519
 
 Action: Login
-ActionID: c3fac375-74e2-4185-b3bb-5159addb4c87
+ActionID: 214fdbe7-7c7c-4ead-abfe-037a3d4cedff
 AuthType: MD5
 Username: admin
-Key: 81f46181e864c9501068d5db47ac0f24
+Key: 6a717a8d45e8445832d5d088862654e9
 
 Response: Success
-ActionID: c3fac375-74e2-4185-b3bb-5159addb4c87
+ActionID: 214fdbe7-7c7c-4ead-abfe-037a3d4cedff
 Message: Authentication accepted
-
-Action: PJSIPShowEndpoints
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
 
 Event: FullyBooted
 Privilege: system,all
 Status: Fully Booted
 
+Action: PJSIPShowEndpoints
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
+
 Event: SuccessfulAuth
 Privilege: security,all
-EventTV: 2019-01-19T18:54:28.841+0000
+EventTV: 2019-01-21T19:56:27.148+0000
 Severity: Informational
 Service: AMI
 EventVersion: 1
 AccountID: admin
 SessionID: 0x7fcb00000d50
 LocalAddress: IPV4/TCP/0.0.0.0/5038
-RemoteAddress: IPV4/TCP/172.17.0.1/44538
+RemoteAddress: IPV4/TCP/172.17.0.1/44628
 UsingPassword: 0
-SessionTV: 2019-01-19T18:54:28.840+0000
+SessionTV: 2019-01-21T19:56:27.148+0000
 
 Response: Success
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 EventList: start
 Message: A listing of Endpoints follows, presented as EndpointList events
 
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1107
 Transport: 
@@ -202,7 +213,7 @@ ActiveChannels:
 
 ~~~ "1107" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1113
 Transport: 
@@ -215,7 +226,7 @@ ActiveChannels:
 
 ~~~ "1113" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1106
 Transport: 
@@ -228,7 +239,7 @@ ActiveChannels:
 
 ~~~ "1106" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1101
 Transport: 
@@ -241,7 +252,7 @@ ActiveChannels:
 
 ~~~ "1101" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1103
 Transport: 
@@ -254,7 +265,7 @@ ActiveChannels:
 
 ~~~ "1103" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1102
 Transport: 
@@ -267,7 +278,7 @@ ActiveChannels:
 
 ~~~ "1102" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1114
 Transport: 
@@ -280,7 +291,7 @@ ActiveChannels:
 
 ~~~ "1114" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1115
 Transport: 
@@ -293,7 +304,7 @@ ActiveChannels:
 
 ~~~ "1115" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1109
 Transport: 
@@ -306,7 +317,7 @@ ActiveChannels:
 
 ~~~ "1109" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1110
 Transport: 
@@ -319,7 +330,7 @@ ActiveChannels:
 
 ~~~ "1110" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: dcs-endpoint
 Transport: 
@@ -332,7 +343,7 @@ ActiveChannels:
 
 ~~~ "dcs-endpoint" (Not in use) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1111
 Transport: 
@@ -345,7 +356,7 @@ ActiveChannels:
 
 ~~~ "1111" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1105
 Transport: 
@@ -358,7 +369,7 @@ ActiveChannels:
 
 ~~~ "1105" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1108
 Transport: 
@@ -371,7 +382,7 @@ ActiveChannels:
 
 ~~~ "1108" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1112
 Transport: 
@@ -384,7 +395,7 @@ ActiveChannels:
 
 ~~~ "1112" (Unavailable) ~~~
 Event: EndpointList
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 ObjectType: endpoint
 ObjectName: 1104
 Transport: 
@@ -397,15 +408,15 @@ ActiveChannels:
 
 ~~~ "1104" (Unavailable) ~~~
 Event: EndpointListComplete
-ActionID: b2c28e04-446f-483a-ac4d-51d0bb3c0ba9
+ActionID: 3ec566db-feec-4758-bc41-407ae70491c2
 EventList: Complete
 ListItems: 16
 
 Action: Logoff
-ActionID: 645913f8-cb61-4b95-b7d5-371347b5db76
+ActionID: e8427d14-04c4-43f3-9f03-e9dd2fc1b891
 
 Response: Goodbye
-ActionID: 645913f8-cb61-4b95-b7d5-371347b5db76
+ActionID: e8427d14-04c4-43f3-9f03-e9dd2fc1b891
 Message: Thanks for all the fish.
 
 ```
@@ -415,76 +426,80 @@ Message: Thanks for all the fish.
 ```csharp
 public sealed class AmiMessage : IEnumerable<KeyValuePair<String, String>>
 {
-    // creation
+   // creation
 
-    public AmiMessage();
+   public AmiMessage();
 
-    public DateTimeOffset Timestamp { get; }
+   public DateTimeOffset Timestamp { get; }
 
-    // deserialization
+   // deserialization
 
-    public static AmiMessage FromBytes(Byte[] bytes);
+   public static AmiMessage FromBytes(Byte[] bytes);
 
-    public static AmiMessage FromString(String @string);
+   public static AmiMessage FromString(String @string);
 
-    // direct field access
+   // direct field access
 
-    public readonly List<KeyValuePair<String, String>> Fields;
+   public readonly List<KeyValuePair<String, String>> Fields;
 
-    // field initialization support
+   // field initialization support
 
-    public void Add(String key, String value);
+   public void Add(String key, String value);
 
-    // field indexer support
+   // field indexer support
 
-    public String this[String key] { get; set; }
+   public String this[String key] { get; set; }
 
-    // field enumeration support
+   // field enumeration support
 
-    public IEnumerator<KeyValuePair<String, String>> GetEnumerator();
+   public IEnumerator<KeyValuePair<String, String>> GetEnumerator();
 
-    IEnumerator IEnumerable.GetEnumerator();
+   IEnumerator IEnumerable.GetEnumerator();
 
-    // serialization
+   // serialization
 
-    public Byte[] ToBytes();
+   public Byte[] ToBytes();
 
-    public override String ToString();
+   public override String ToString();
 }
 
 public sealed class AmiClient : IDisposable, IObservable<AmiMessage>
 {
-    // creation
+   // creation
 
-    public AmiClient(Stream stream);
+   public AmiClient();
 
-    // AMI protocol helpers
+   public AmiClient(Stream stream);
 
-    public async Task<Boolean> Login(String username, String secret, Boolean md5 = true);
+   public Stream Stream { get; set; } 
 
-    public async Task<Boolean> Logoff();
+   // AMI protocol helpers
 
-    // AMI protocol debugging
+   public async Task<Boolean> Login(String username, String secret, Boolean md5 = true);
 
-    public sealed class DataEventArgs : EventArgs
-    {
-        public readonly String Data;
-    }
+   public async Task<Boolean> Logoff();
 
-    public event EventHandler<DataEventArgs> DataSent;
+   // AMI protocol debugging
 
-    public event EventHandler<DataEventArgs> DataReceived;
+   public sealed class DataEventArgs : EventArgs
+   {
+       public readonly Byte[] Data;
+   }
 
-    // request/reply
+   public event EventHandler<DataEventArgs> DataSent;
 
-    public async Task<AmiMessage> Publish(AmiMessage action);
+   public event EventHandler<DataEventArgs> DataReceived;
 
-    // IObservable<AmiMessage>
+   // request/reply
 
-    public IDisposable Subscribe(IObserver<AmiMessage> observer);
+   public async Task<AmiMessage> Publish(AmiMessage action);
 
-    public void Unsubscribe(IObserver<AmiMessage> observer);
+   // IObservable<AmiMessage>
 
-    public void Dispose();
+   public IDisposable Subscribe(IObserver<AmiMessage> observer);
+
+   public void Unsubscribe(IObserver<AmiMessage> observer);
+
+   public void Dispose();
 }
 ```

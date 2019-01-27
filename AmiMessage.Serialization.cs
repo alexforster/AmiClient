@@ -1,4 +1,5 @@
 /* Copyright © 2019 Alex Forster. All rights reserved.
+ * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,24 +23,28 @@ namespace Ami
 	using System.Collections.Generic;
 	using System.Linq;
 
+	using ByteArrayExtensions;
+
 	public sealed partial class AmiMessage
 	{
+		internal static readonly Byte[] TerminatorBytes = { 0x0d, 0x0a };
+		internal static readonly Char[] TerminatorChars = { '\x0d', '\x0a' };
+
 		public static AmiMessage FromBytes(Byte[] bytes)
 		{
 			var result = new AmiMessage();
 
-			var stream = new MemoryStream(bytes);
-
-			var reader = new StreamReader(stream, new UTF8Encoding(false));
-
 			for(var nrLine = 1;; nrLine++)
 			{
-				var line = reader.ReadLine();
+				var crlfPos = bytes.Find(AmiMessage.TerminatorBytes, 0, bytes.Length);
 
-				if(line == null)
+				if(crlfPos == -1)
 				{
-					throw new ArgumentException("unterminated message", nameof(bytes));
+					throw new ArgumentException($"unexpected end of message after {nrLine} line(s)", nameof(bytes));
 				}
+
+				var line = Encoding.UTF8.GetString(bytes.Slice(0, crlfPos));
+				bytes = bytes.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
 
 				if(line.Equals(String.Empty))
 				{
@@ -74,10 +79,13 @@ namespace Ami
 			{
 				foreach(var field in this.Fields)
 				{
-					writer.Write($"{field.Key}: {field.Value}\x0d\x0a");
+					writer.Write(field.Key);
+					writer.Write(": ");
+					writer.Write(field.Value);
+					writer.Write(AmiMessage.TerminatorChars);
 				}
 
-				writer.Write("\x0d\x0a");
+				writer.Write(AmiMessage.TerminatorChars);
 			}
 
 			return stream.ToArray();
