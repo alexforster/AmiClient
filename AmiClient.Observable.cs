@@ -17,7 +17,6 @@
 namespace Ami
 {
 	using System;
-	using System.Diagnostics;
 	using System.IO;
 	using System.Text;
 	using System.Collections.Generic;
@@ -32,9 +31,6 @@ namespace Ami
 
 	public sealed partial class AmiClient : IDisposable, IObservable<AmiMessage>
 	{
-		private readonly ConcurrentDictionary<IObserver<AmiMessage>, Subscription> observers =
-			new ConcurrentDictionary<IObserver<AmiMessage>, Subscription>();
-
 		private void Dispatch(AmiMessage message)
 		{
 			foreach(var observer in this.observers.Keys)
@@ -60,11 +56,7 @@ namespace Ami
 				throw new ArgumentNullException(nameof(observer));
 			}
 
-			var subscription = new Subscription(this, observer);
-
-			Debug.Assert(this.observers.TryAdd(observer, subscription));
-
-			return subscription;
+			return this.observers.GetOrAdd(observer, _ => new Subscription(this, observer));
 		}
 
 		public void Unsubscribe(IObserver<AmiMessage> observer)
