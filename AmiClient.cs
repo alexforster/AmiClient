@@ -180,8 +180,7 @@ namespace Ami
 
 				this.processing = true;
 
-				if(!Encoding.UTF8.GetString(handshake)
-				            .StartsWith("Asterisk Call Manager", StringComparison.OrdinalIgnoreCase))
+				if(String.IsNullOrEmpty(Encoding.UTF8.GetString(handshake)))
 				{
 					throw new AmiException("protocol handshake failed (is this an Asterisk server?)");
 				}
