@@ -205,8 +205,8 @@ namespace Ami
 					try
 					{
 						await lineObserver
-						     .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
-						     .Do(line => payload = payload.Append(line));
+							 .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
+							 .Do(line => payload = payload.Append(line));
 					}
 					catch (InvalidOperationException)
 					{
