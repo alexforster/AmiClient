@@ -33,6 +33,8 @@ namespace Ami
 	{
 		private Stream stream;
 
+		public Boolean IsProcessing { get; private set; }
+
 		public Stream Stream
 		{
 			get => this.stream;
@@ -60,12 +62,12 @@ namespace Ami
 
 				var oneSecondFromNow = DateTimeOffset.Now.AddSeconds(1);
 
-				while(!this.processing && DateTimeOffset.Now < oneSecondFromNow)
+				while(!this.IsProcessing && DateTimeOffset.Now < oneSecondFromNow)
 				{
 					Thread.Yield();
 				}
 
-				if(!this.processing)
+				if(!this.IsProcessing)
 				{
 					throw new AmiException("could not exchange the AMI protocol banner");
 				}
@@ -166,8 +168,6 @@ namespace Ami
 			}
 		}
 
-		private Boolean processing;
-
 		private async Task WorkerMain()
 		{
 			try
@@ -178,20 +178,28 @@ namespace Ami
 
 				this.DataReceived?.Invoke(this, new DataEventArgs(handshake));
 
-				this.processing = true;
+				this.IsProcessing = true;
 
 				if(String.IsNullOrEmpty(Encoding.UTF8.GetString(handshake)))
 				{
 					throw new AmiException("protocol handshake failed (is this an Asterisk server?)");
 				}
 
-				while(this.processing)
+				while(this.IsProcessing)
 				{
 					var payload = new Byte[0];
 
-					await lineObserver
-					     .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
-					     .Do(line => payload = payload.Append(line));
+					try
+					{
+						await lineObserver
+						     .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
+						     .Do(line => payload = payload.Append(line));
+					}
+					catch (InvalidOperationException)
+					{
+						this.IsProcessing = false;
+						break;
+					}
 
 					this.DataReceived?.Invoke(this, new DataEventArgs(payload));
 

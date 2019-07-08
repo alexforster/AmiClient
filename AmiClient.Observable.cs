@@ -78,7 +78,7 @@ namespace Ami
 				this.Unsubscribe(observer);
 			}
 
-			this.processing = false;
+			this.IsProcessing = false;
 		}
 
 		private sealed class Subscription : IDisposable
