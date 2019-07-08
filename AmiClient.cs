@@ -144,13 +144,10 @@ namespace Ami
 			{
 				if(!this.readBuffer.Any())
 				{
-					var bytes = new Byte[4096];
-					var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-					if(nrBytes == 0)
+					if (GetBytes() == 0)
 					{
 						break;
 					}
-					this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
 				}
 
 				while(this.readBuffer.Any())
@@ -158,14 +155,30 @@ namespace Ami
 					var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
 					if(crlfPos == -1)
 					{
-						goto CONTINUE;
+						if (this.GetBytes() == 0)
+						{
+							this.readBuffer = new byte[0];
+						}
+						break;
 					}
 					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
 					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
 					yield return line;
 				}
-				CONTINUE: ;
 			}
+		}
+
+		private Int32 GetBytes()
+		{
+			var bytes = new Byte[4096];
+			var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
+
+			if (nrBytes != 0)
+			{
+				this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
+			}
+
+			return nrBytes;
 		}
 
 		private async Task WorkerMain()
