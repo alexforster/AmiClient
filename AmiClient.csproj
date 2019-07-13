@@ -1,8 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <PackageId>AmiClient</PackageId>
+    <Title>AmiClient</Title>
+    <PackageVersion>1.2.4</PackageVersion>
+    <RepositoryUrl>https://github.com/alexforster/AmiClient/tree/v1.2.4</RepositoryUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageTags>asterisk asterisk-ami asterisk-pbx voip sip csharp csharp-library netstandard netcore</PackageTags>
+    <Copyright>Copyright © 2019 Alex Forster</Copyright>
+    <Description>Asterisk Management Interface (AMI) client library for .NET</Description>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <IsPackable>false</IsPackable>
+    <IsPackable>true</IsPackable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RootNamespace>Ami</RootNamespace>
+    <PackageProjectUrl>https://github.com/alexforster/AmiClient</PackageProjectUrl>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <LangVersion>7.3</LangVersion>
@@ -16,9 +28,6 @@
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
-  <ItemGroup>
-    <Folder Include="Properties\" />
-  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Reactive.Interfaces" Version="4.1.5" />
   </ItemGroup>

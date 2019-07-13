@@ -13,7 +13,6 @@ Asterisk Management Interface (AMI) client library for .NET
 
 **Dependencies**
 
- * `NetStandard.Library`
  * `System.Reactive.Interfaces`
 
 **Note:** While it's not a dependency, you will probably want to use the `System.Reactive.Linq` package alongside this library.
@@ -43,7 +42,30 @@ write = all
 EOF
 ```
 
- 3. Run a local Asterisk 13 Docker container...
+ 3. Build an Asterisk 13 Docker image...
+
+```bash
+cat <<'EOF' | docker build -t asterisk13 -
+FROM amd64/ubuntu:cosmic
+SHELL ["/bin/bash", "-eu", "-c"]
+
+RUN \
+	export DEBIAN_FRONTEND=noninteractive; \
+	apt-get update; \
+	apt-get -y install ca-certificates apt-utils; \
+	apt-get -y install asterisk;
+
+VOLUME /etc/asterisk
+USER asterisk:asterisk
+EXPOSE 5038/tcp
+EXPOSE 5060/udp
+EXPOSE 10000-10500/udp
+
+ENTRYPOINT ["/usr/sbin/asterisk", "-vvvvvvvvv", "-ddddddddd", "-c"]
+EOF
+```
+
+ 4. Run your new Asterisk 13 Docker image in a temporary container...
 
 ```bash
 docker run -dit --rm --privileged \
@@ -55,7 +77,7 @@ docker run -dit --rm --privileged \
          asterisk13
 ```
 
- 4. Use the example code below as a starting point for learning the *AmiClient* API...
+ 5. Use the example code below as a starting point for learning the *AmiClient* API...
 
 ### Example code
 
