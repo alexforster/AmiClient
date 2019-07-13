@@ -56,6 +56,12 @@ namespace Ami
 
 				this.stream = value;
 
+				if(this.stream.CanTimeout)
+				{
+					this.stream.ReadTimeout = 100 /*ms*/;
+					this.stream.WriteTimeout = 100 /*ms*/;
+				}
+
 				Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
 
 				// wait up to one second for the worker thread to consume a protocol banner from the server
@@ -114,6 +120,7 @@ namespace Ami
 
 				lock(this.stream)
 				{
+					// note: IOException due to timeout causes Publish to fail
 					this.stream.Write(buffer, 0, buffer.Length);
 				}
 
@@ -141,29 +148,35 @@ namespace Ami
 		{
 			while(true)
 			{
-				if(!this.readBuffer.Any())
+				if(!this.readBuffer.Any() || this.stream.CanTimeout)
 				{
 					var bytes = new Byte[4096];
-					var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-					if(nrBytes == 0)
+					try
 					{
-						break;
+						var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
+						if(nrBytes == 0)
+						{
+							break; // eof
+						}
+						this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
 					}
-					this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
+					catch(IOException)
+					{
+						// timeout
+					}
 				}
 
-				while(this.readBuffer.Any())
+				while(true)
 				{
 					var crlfPos = this.readBuffer.Find(AmiMessage.CrLfBytes);
 					if(crlfPos == -1)
 					{
-						goto CONTINUE;
+						break;
 					}
 					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.CrLfBytes.Length);
 					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.CrLfBytes.Length);
 					yield return line;
 				}
-				CONTINUE: ;
 			}
 		}
 
