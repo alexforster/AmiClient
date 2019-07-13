@@ -27,8 +27,8 @@ namespace Ami
 
 	public sealed partial class AmiMessage
 	{
-		internal static readonly Byte[] TerminatorBytes = { 0x0d, 0x0a };
-		internal static readonly Char[] TerminatorChars = { '\x0d', '\x0a' };
+		internal static readonly Byte[] CrLfBytes = { 0x0d, 0x0a };
+		internal static readonly Char[] CrLfChars = { '\x0d', '\x0a' };
 
 		public static AmiMessage FromBytes(Byte[] bytes)
 		{
@@ -36,7 +36,7 @@ namespace Ami
 
 			for(var nrLine = 1;; nrLine++)
 			{
-				var crlfPos = bytes.Find(AmiMessage.TerminatorBytes, 0, bytes.Length);
+				var crlfPos = bytes.Find(AmiMessage.CrLfBytes, 0, bytes.Length);
 
 				if(crlfPos == -1)
 				{
@@ -44,7 +44,7 @@ namespace Ami
 				}
 
 				var line = Encoding.UTF8.GetString(bytes.Slice(0, crlfPos));
-				bytes = bytes.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
+				bytes = bytes.Slice(crlfPos + AmiMessage.CrLfBytes.Length);
 
 				if(line.Equals(String.Empty))
 				{
@@ -82,10 +82,10 @@ namespace Ami
 					writer.Write(field.Key);
 					writer.Write(": ");
 					writer.Write(field.Value);
-					writer.Write(AmiMessage.TerminatorChars);
+					writer.Write(AmiMessage.CrLfChars);
 				}
 
-				writer.Write(AmiMessage.TerminatorChars);
+				writer.Write(AmiMessage.CrLfChars);
 			}
 
 			return stream.ToArray();

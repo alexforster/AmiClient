@@ -58,6 +58,8 @@ namespace Ami
 
 				Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
 
+				// wait up to one second for the worker thread to consume a protocol banner from the server
+
 				var oneSecondFromNow = DateTimeOffset.Now.AddSeconds(1);
 
 				while(!this.processing && DateTimeOffset.Now < oneSecondFromNow)
@@ -80,12 +82,11 @@ namespace Ami
 		{
 			this.observers = new ConcurrentDictionary<IObserver<AmiMessage>, Subscription>(
 				Environment.ProcessorCount,
-				65536);
+				1024 * 64);
 
 			this.inFlight = new ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>>(
 				Environment.ProcessorCount,
-				16384,
-				StringComparer.OrdinalIgnoreCase);
+				1024 * 16);
 		}
 
 		public AmiClient(Stream stream) : this()
@@ -153,13 +154,13 @@ namespace Ami
 
 				while(this.readBuffer.Any())
 				{
-					var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
+					var crlfPos = this.readBuffer.Find(AmiMessage.CrLfBytes);
 					if(crlfPos == -1)
 					{
 						goto CONTINUE;
 					}
-					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
-					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
+					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.CrLfBytes.Length);
+					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.CrLfBytes.Length);
 					yield return line;
 				}
 				CONTINUE: ;
@@ -190,7 +191,7 @@ namespace Ami
 					var payload = new Byte[0];
 
 					await lineObserver
-					     .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
+					     .TakeUntil(line => line.SequenceEqual(AmiMessage.CrLfBytes))
 					     .Do(line => payload = payload.Append(line));
 
 					this.DataReceived?.Invoke(this, new DataEventArgs(payload));

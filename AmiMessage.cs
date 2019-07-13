@@ -58,7 +58,7 @@ namespace Ami
 					throw new ArgumentException("key cannot be null or whitespace", nameof(key));
 				}
 
-				if(key.IndexOfAny(AmiMessage.TerminatorChars) != -1)
+				if(key.IndexOfAny(AmiMessage.CrLfChars) != -1)
 				{
 					throw new ArgumentException("key cannot contain newline characters", nameof(key));
 				}
@@ -68,7 +68,7 @@ namespace Ami
 					throw new ArgumentNullException(nameof(value));
 				}
 
-				if(value.IndexOfAny(AmiMessage.TerminatorChars) != -1)
+				if(value.IndexOfAny(AmiMessage.CrLfChars) != -1)
 				{
 					throw new ArgumentException("value cannot contain newline characters", nameof(value));
 				}
@@ -99,8 +99,8 @@ namespace Ami
 				{
 					if(Double.TryParse(value, out var seconds))
 					{
-						var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
-						this.Timestamp = dt.AddSeconds(seconds);
+						var unixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+						this.Timestamp = unixEpoch.AddSeconds(seconds);
 					}
 				}
 			}
