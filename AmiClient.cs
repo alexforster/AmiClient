@@ -140,29 +140,27 @@ namespace Ami
 		{
 			while(true)
 			{
-				if(!this.readBuffer.Any())
+				var bytes = new Byte[4096];
+				var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
+				if(nrBytes == 0)
 				{
-					var bytes = new Byte[4096];
-					var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-					if(nrBytes == 0)
-					{
-						break;
-					}
-					this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
+					// underlying stream timeout / error, our read returned 0 bytes
+					break;
 				}
+				this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
 
+				// yield messages as long as we find a AmiMessage.TerminatorBytes in the buffer
 				while(this.readBuffer.Any())
 				{
 					var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
 					if(crlfPos == -1)
 					{
-						goto CONTINUE;
+						continue;
 					}
 					var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
 					this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
 					yield return line;
 				}
-				CONTINUE: ;
 			}
 		}
 
