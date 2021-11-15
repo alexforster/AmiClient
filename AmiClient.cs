@@ -21,6 +21,7 @@ namespace Ami
     using System.Text;
     using System.Collections.Generic;
     using System.Collections.Concurrent;
+    using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
     using System.Linq;
@@ -140,26 +141,12 @@ namespace Ami
         {
             while(true)
             {
-                if(!this.readBuffer.Any())
-                {
-                    var bytes = new Byte[4096];
-                    var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-
-                    if(nrBytes == 0)
-                    {
-                        break;
-                    }
-
-                    this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
-                }
-
-                while(this.readBuffer.Any())
+                while(true)
                 {
                     var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
-
-                    if(crlfPos == -1)
+                    if(crlfPos < 0)
                     {
-                        goto CONTINUE;
+                        break;
                     }
 
                     var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
@@ -168,7 +155,27 @@ namespace Ami
                     yield return line;
                 }
 
-            CONTINUE: ;
+                try
+                {
+                    var bytes = new Byte[4096];
+
+                    var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
+                    if(nrBytes == 0)
+                    {
+                        yield break; // EOF
+                    }
+
+                    this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
+
+                    this.DataReceived?.Invoke(this, new DataEventArgs(bytes.Slice(0, nrBytes)));
+                }
+                catch(SocketException ex)
+                {
+                    if(ex.SocketErrorCode != SocketError.Interrupted && ex.SocketErrorCode != SocketError.TimedOut)
+                    {
+                        throw;
+                    }
+                }
             }
         }
 
