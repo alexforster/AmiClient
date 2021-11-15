@@ -2,8 +2,8 @@
   <PropertyGroup>
     <PackageId>AmiClient</PackageId>
     <Title>AmiClient</Title>
-    <PackageVersion>1.2.4</PackageVersion>
-    <RepositoryUrl>https://github.com/alexforster/AmiClient/tree/v1.2.4</RepositoryUrl>
+    <PackageVersion>1.3.0</PackageVersion>
+    <RepositoryUrl>https://github.com/alexforster/AmiClient/tree/v1.3.0</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>asterisk asterisk-ami asterisk-pbx voip sip csharp csharp-library netstandard netcore</PackageTags>
@@ -29,6 +29,6 @@
     <OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Reactive.Interfaces" Version="4.1.5" />
+    <PackageReference Include="System.Reactive.Interfaces" Version="4.*" />
   </ItemGroup>
 </Project>
