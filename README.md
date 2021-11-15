@@ -21,39 +21,35 @@ Asterisk Management Interface (AMI) client library for .NET
 
 Here's an easy way to set up an Asterisk 13 development environment:
 
- 1. Download a local copy of [this basic Asterisk configuration](https://github.com/asterisk/asterisk/tree/13/configs/basic-pbx) and place it in the directory `~/Desktop/etc-asterisk` (or your preferred location)
- 2. Add a `manager.conf` file to your basic Asterisk configuration directory to enable the Asterisk Management Interface...
-
-```
-cat << EOF > ~/Desktop/etc-asterisk/manager.conf
-; manager.conf
-
-[general]
-enabled = yes
-bindaddr = 0.0.0.0
-port = 5038
-timestampevents = yes ; (optional but helpful)
-
-[admin]
-secret = amp111
-read = all
-write = all
-
-EOF
-```
-
- 3. Build an Asterisk 13 Docker image...
+First, build an Asterisk 13 Docker image...
 
 ```bash
 cat <<'EOF' | docker build -t asterisk13 -
-FROM amd64/ubuntu:cosmic
-SHELL ["/bin/bash", "-eu", "-c"]
+FROM amd64/ubuntu:bionic
+SHELL ["/bin/bash", "-e", "-u", "-o", "pipefail", "-c"]
 
 RUN \
 	export DEBIAN_FRONTEND=noninteractive; \
 	apt-get update; \
 	apt-get -y install ca-certificates apt-utils; \
 	apt-get -y install asterisk;
+
+RUN printf '%s\n' \
+	'[general]' \
+	'enabled = yes' \
+	'bindaddr = 0.0.0.0' \
+	'port = 5038' \
+	'timestampevents = yes' \
+	'' \
+	'#include "manager.d/*.conf"' \
+> /etc/asterisk/manager.conf
+
+RUN printf '%s\n' \
+	'[admin]' \
+	'secret = amp111' \
+	'read = all' \
+	'write = all' \
+> /etc/asterisk/manager.d/admin.conf
 
 VOLUME /etc/asterisk
 USER asterisk:asterisk
@@ -65,19 +61,18 @@ ENTRYPOINT ["/usr/sbin/asterisk", "-vvvvvvvvv", "-ddddddddd", "-c"]
 EOF
 ```
 
- 4. Run your new Asterisk 13 Docker image in a temporary container...
+Then, run your new Asterisk 13 Docker image in a temporary container...
 
 ```bash
-docker run -dit --rm --privileged \
-         --name asterisk13-dev \
-         -p 5060:5060 -p 5060:5060/udp \
-         -p 10000-10500:10000-10500/udp \
-         -p 5038:5038 \
-         -v ~/Desktop/etc-asterisk:/etc/asterisk \
-         asterisk13
+docker run -it --rm \
+           --name asterisk13-dev \
+           -p 5060:5060 -p 5060:5060/udp \
+           -p 10000-10500:10000-10500/udp \
+           -p 5038:5038 \
+           asterisk13
 ```
 
- 5. Use the example code below as a starting point for learning the *AmiClient* API...
+Use the example code below as a starting point for learning the *AmiClient* API...
 
 ### Example code
 
