@@ -45,6 +45,8 @@ namespace Ami
                     throw new ArgumentException("value cannot be null or whitespace", nameof(key));
                 }
 
+                key = key.Trim();
+
                 return this.Fields
                            .Where(kvp => kvp.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
                            .Select(el => el.Value)
@@ -58,22 +60,13 @@ namespace Ami
                     throw new ArgumentException("key cannot be null or whitespace", nameof(key));
                 }
 
-                if(key.IndexOfAny(AmiMessage.TerminatorChars) != -1)
-                {
-                    throw new ArgumentException("key cannot contain newline characters", nameof(key));
-                }
+                key = key.Trim();
 
                 if(value == null)
                 {
                     throw new ArgumentNullException(nameof(value));
                 }
 
-                if(value.IndexOfAny(AmiMessage.TerminatorChars) != -1)
-                {
-                    throw new ArgumentException("value cannot contain newline characters", nameof(value));
-                }
-
-                key = key.Trim();
                 value = value.Trim();
 
                 if(key.Equals("ActionID", StringComparison.OrdinalIgnoreCase))
