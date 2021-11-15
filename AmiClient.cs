@@ -210,7 +210,8 @@ namespace Ami
 
                     var message = AmiMessage.FromBytes(payload);
 
-                    if(message["Response"] != null && this.inFlight.TryGetValue(message["ActionID"], out var tcs))
+                    if(message.Fields.FirstOrDefault().Key == "Response" &&
+                       this.inFlight.TryGetValue(message["ActionID"], out var tcs))
                     {
                         tcs.SetResult(message);
                     }
