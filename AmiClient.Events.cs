@@ -16,33 +16,33 @@
 
 namespace Ami
 {
-	using System;
-	using System.IO;
-	using System.Text;
-	using System.Collections.Generic;
-	using System.Collections.Concurrent;
-	using System.Threading;
-	using System.Threading.Tasks;
-	using System.Linq;
-	using System.Reactive.Linq;
-	using System.Security.Cryptography;
+    using System;
+    using System.IO;
+    using System.Text;
+    using System.Collections.Generic;
+    using System.Collections.Concurrent;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Linq;
+    using System.Reactive.Linq;
+    using System.Security.Cryptography;
 
-	using ByteArrayExtensions;
+    using ByteArrayExtensions;
 
-	public sealed partial class AmiClient
-	{
-		public sealed class DataEventArgs : EventArgs
-		{
-			public readonly Byte[] Data;
+    public sealed partial class AmiClient
+    {
+        public sealed class DataEventArgs : EventArgs
+        {
+            public readonly Byte[] Data;
 
-			internal DataEventArgs(Byte[] data)
-			{
-				this.Data = data;
-			}
-		}
+            internal DataEventArgs(Byte[] data)
+            {
+                this.Data = data;
+            }
+        }
 
-		public event EventHandler<DataEventArgs> DataSent;
+        public event EventHandler<DataEventArgs> DataSent;
 
-		public event EventHandler<DataEventArgs> DataReceived;
-	}
+        public event EventHandler<DataEventArgs> DataReceived;
+    }
 }

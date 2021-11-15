@@ -16,16 +16,16 @@
 
 namespace Ami
 {
-	using System;
+    using System;
 
-	public sealed class AmiException : Exception
-	{
-		public AmiException(String message) : base(message)
-		{
-		}
+    public sealed class AmiException : Exception
+    {
+        public AmiException(String message) : base(message)
+        {
+        }
 
-		public AmiException(String message, Exception innerException) : base(message, innerException)
-		{
-		}
-	}
+        public AmiException(String message, Exception innerException) : base(message, innerException)
+        {
+        }
+    }
 }
