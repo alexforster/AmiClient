@@ -30,23 +30,13 @@ namespace Ami
 
     using ByteArrayExtensions;
 
-    public sealed partial class AmiClient : IDisposable, IObservable<AmiMessage>
+    public sealed partial class AmiClient : IObservable<AmiMessage>
     {
         private void Dispatch(AmiMessage message)
         {
             foreach(var observer in this.observers.Keys)
             {
                 observer.OnNext(message);
-            }
-        }
-
-        private void Dispatch(Exception exception)
-        {
-            foreach(var observer in this.observers.Keys)
-            {
-                observer.OnError(exception);
-
-                this.Unsubscribe(observer);
             }
         }
 
@@ -68,18 +58,6 @@ namespace Ami
             }
 
             this.observers.TryRemove(observer, out _);
-        }
-
-        public void Dispose()
-        {
-            foreach(var observer in this.observers.Keys)
-            {
-                observer.OnCompleted();
-
-                this.Unsubscribe(observer);
-            }
-
-            this.processing = false;
         }
 
         private sealed class Subscription : IDisposable

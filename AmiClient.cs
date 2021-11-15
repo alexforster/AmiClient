@@ -30,10 +30,8 @@ namespace Ami
 
     using ByteArrayExtensions;
 
-    public sealed partial class AmiClient
+    public sealed partial class AmiClient : IDisposable
     {
-        private Stream stream;
-
         private readonly ConcurrentDictionary<IObserver<AmiMessage>, Subscription> observers;
 
         private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight;
@@ -49,6 +47,8 @@ namespace Ami
                 16384,
                 StringComparer.OrdinalIgnoreCase);
         }
+
+        private Stream stream;
 
         [Obsolete("use Start() method")]
         public AmiClient(Stream stream) : this()
@@ -98,22 +98,72 @@ namespace Ami
             return Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
         }
 
+        public void Stop()
+        {
+            this.Stop(null);
+        }
+
+        private void Stop(Exception ex)
+        {
+            if(this.stream == null)
+            {
+                return;
+            }
+
+            foreach(var observer in this.observers.Keys)
+            {
+                if(ex != null)
+                {
+                    observer.OnError(ex);
+                }
+                else
+                {
+                    observer.OnCompleted();
+                }
+
+                this.observers.TryRemove(observer, out _);
+            }
+
+            foreach(var kvp in this.inFlight)
+            {
+                if(ex != null)
+                {
+                    kvp.Value.TrySetException(ex);
+                }
+                else
+                {
+                    kvp.Value.TrySetCanceled();
+                }
+
+                this.inFlight.TryRemove(kvp.Key, out _);
+            }
+
+            this.stream = null;
+
+            this.Stopped?.Invoke(this, new LifecycleEventArgs(ex));
+        }
+
+        public void Dispose()
+        {
+            this.Stop();
+        }
+
         public async Task<AmiMessage> Publish(AmiMessage action)
         {
             if(this.stream == null)
             {
-                throw new InvalidOperationException("client has not been started");
+                throw new InvalidOperationException("client is not started");
+            }
+
+            var tcs = new TaskCompletionSource<AmiMessage>(TaskCreationOptions.AttachedToParent);
+
+            if(!this.inFlight.TryAdd(action["ActionID"], tcs))
+            {
+                throw new AmiException("a message with the same ActionID is already in flight");
             }
 
             try
             {
-                var tcs = new TaskCompletionSource<AmiMessage>(TaskCreationOptions.AttachedToParent);
-
-                if(!this.inFlight.TryAdd(action["ActionID"], tcs))
-                {
-                    throw new AmiException("a message with the same ActionID is already in flight");
-                }
-
                 var buffer = action.ToBytes();
 
                 lock(this.stream)
@@ -123,19 +173,16 @@ namespace Ami
 
                 this.DataSent?.Invoke(this, new DataEventArgs(buffer));
 
-                var response = await tcs.Task;
-
-                this.inFlight.TryRemove(response["ActionID"], out _);
-
-                return response;
+                return await tcs.Task;
             }
             catch(Exception ex)
             {
-                this.Dispatch(ex);
-
+                this.Stop(ex);
+                throw;
+            }
+            finally
+            {
                 this.inFlight.TryRemove(action["ActionID"], out _);
-
-                return null;
             }
         }
 
@@ -186,23 +233,25 @@ namespace Ami
             }
         }
 
-        private Boolean processing;
-
         private async Task WorkerMain()
         {
-            this.processing = true;
-
             var lineObserver = this.lineObserver.ToObservable();
 
             try
             {
-                while(this.processing)
+                while(this.stream != null)
                 {
                     var payload = new Byte[0];
 
                     await lineObserver
                           .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
-                          .Do(line => payload = payload.Append(line));
+                          .Do(line => payload = payload.Append(line))
+                          .DefaultIfEmpty();
+
+                    if(payload.Length == 0)
+                    {
+                        break;
+                    }
 
                     var message = AmiMessage.FromBytes(payload);
 
@@ -217,14 +266,13 @@ namespace Ami
                     }
                 }
             }
-            catch(ThreadAbortException)
-            {
-                Thread.ResetAbort();
-            }
             catch(Exception ex)
             {
-                this.Dispatch(ex);
+                this.Stop(ex);
+                return;
             }
+
+            this.Stop();
         }
     }
 }

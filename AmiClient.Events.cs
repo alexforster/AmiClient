@@ -45,5 +45,17 @@ namespace Ami
         public event EventHandler<DataEventArgs> DataSent;
 
         public event EventHandler<DataEventArgs> DataReceived;
+
+        public sealed class LifecycleEventArgs : EventArgs
+        {
+            public readonly Exception Exception;
+
+            internal LifecycleEventArgs(Exception ex)
+            {
+                this.Exception = ex;
+            }
+        }
+
+        public event EventHandler<LifecycleEventArgs> Stopped;
     }
 }

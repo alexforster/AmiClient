@@ -83,6 +83,7 @@ docker run -dit --rm --privileged \
 
 ```csharp
 using System;
+using System.Text;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
@@ -91,86 +92,110 @@ using Ami;
 
 namespace Playground
 {
-   internal static class Program
-   {
-     public static async Task Main(String[] args)
-     {
-       using(var socket = new TcpClient(hostname: "127.0.0.1", port: 5038))
-       using(var client = new AmiClient())
-       {
-         // Activity on the wire can be observed and logged using the
-         // DataSent and DataReceived events...
+  internal static class Program
+  {
+    public static async Task Main(String[] args)
+    {
+      // Let's create the AmiClient and set up some general event handling...
 
-         client.DataSent += (s, e) => Console.Error.Write(e.Data);
-         client.DataReceived += (s, e) => Console.Error.Write(e.Data);
+      var client = new AmiClient();
 
-         // To make testing possible, the user is expected to provide
-         // AmiClient with a Stream object that is readable and writable.
+      // Activity on the wire can be observed and logged using the DataSent
+      // and DataReceived events...
 
-         await client.Start(socket.GetStream());
+      client.DataSent += (s, e) =>
+        Console.Error.Write($"{Encoding.UTF8.GetString(e.Data)}");
+      client.DataReceived += (s, e) =>
+        Console.Error.Write($"{Encoding.UTF8.GetString(e.Data)}");
 
-         // At this point, we've completed the AMI protocol handshake and
-         // a background I/O Task is consuming data from the socket.
+      // To make testing possible, an AmiClient can operate on any underlying
+      // Stream object that is readable and writable. This means that the user
+      // is responsible for maintaining a TCP connection to the AMI server...
 
-         // First, let's authenticate using the Login() helper function...
+      var socket = new TcpClient(hostname: "127.0.0.1", port: 5038);
 
-         if(!await client.Login(username: "admin", secret: "amp111", md5: true))
-         {
-            Console.WriteLine("Login failed");
-            return;
-         }
+      // The Stopped event can be used to observe when the AmiClient stops
+      // processing the underlying stream for any reason...
 
-         // In case the Asterisk server hasn't finished booting, let's wait
-         // until it's ready...
+      client.Stopped += (s, e) =>
+      {
+        if(e.Exception != null)
+        {
+          Console.Error.WriteLine($"Exception: {e.Exception}");
+        }
+      };
 
-         await client.Where(message => message["Event"] == "FullyBooted").FirstAsync();
+      // Let's go...
 
-         // Now let's issue a PJSIPShowEndpoints command...
+      using(socket)
+      using(client)
+      {
+        // First, complete the AMI protocol handshake and start a background
+        // I/O task to consume data from the socket...
 
-         var response = await client.Publish(new AmiMessage
-         {
-            { "Action", "PJSIPShowEndpoints" },
-         });
+        await client.Start(socket.GetStream());
 
-         // Because we didn't specify an ActionID, one was implicitly
-         // created for us by the AmiMessage object. That's how we track
-         // requests and responses, allowing this client to be used
-         // by multiple threads or tasks.
+        // Next, let's authenticate using the Login() helper function...
 
-         if(response["Response"] == "Success")
-         {
-            // After the PJSIPShowEndpoints command successfully executes,
-            // Asterisk will begin emitting EndpointList events.
+        if(!await client.Login(username: "admin", secret: "amp111", md5: true))
+        {
+          Console.Out.WriteLine("Login failed");
+          return;
+        }
 
-            // Each EndpointList event represents a single PJSIP endpoint,
-            // and has the same ActionID as the PJSIPShowEndpoints command
-            // that caused it.
+        // In case the Asterisk server hasn't finished booting, let's wait
+        // until it's ready...
 
-            // Once events have been emitted for all PJSIP endpoints,
-            // an EndpointListComplete event will be emitted, again with
-            // the same ActionID as the PJSIPShowEndpoints command
-            // that caused it.
+        await client.Where(message => message["Event"] == "FullyBooted").FirstAsync();
 
-            // Using System.Reactive.Linq, all of that can be modeled with
-            // a simple Rx IObservable consumer...
+        // Now, let's issue a PJSIPShowEndpoints command...
 
-            await client
-               .Where(message => message["ActionID"] == response["ActionID"])
-               .TakeWhile(message => message["Event"] != "EndpointListComplete")
-               .Do(message => Console.Out.WriteLine($"~~~ \"{message["ObjectName"]}\" ({message["DeviceState"]}) ~~~"));
-         }
+        var response = await client.Publish(new AmiMessage
+        {
+          { "Action", "PJSIPShowEndpoints" },
+        });
 
-         // We're done, so let's be a good client and use the Logoff()
-         // helper function...
+        // Because we didn't specify an ActionID, one was implicitly
+        // created for us by the AmiMessage object. That's how we track
+        // requests and responses, allowing this client to be used
+        // by multiple threads or tasks.
 
-         if(!await client.Logoff())
-         {
-            Console.WriteLine("Logoff failed");
-            return;
-         }
-       }
-     }
-   }
+        if(response["Response"] == "Success")
+        {
+          // After the PJSIPShowEndpoints command successfully executes,
+          // Asterisk will begin emitting EndpointList events.
+
+          // Each EndpointList event represents a single PJSIP endpoint,
+          // and has the same ActionID as the PJSIPShowEndpoints command
+          // that caused it.
+
+          // Once events have been emitted for all PJSIP endpoints,
+          // an EndpointListComplete event will be emitted, again with
+          // the same ActionID as the PJSIPShowEndpoints command
+          // that caused it.
+
+          // Using System.Reactive.Linq, all of that can be modeled with
+          // a simple Rx IObservable consumer...
+
+          await client
+              .Where(message => message["ActionID"] == response["ActionID"])
+              .TakeWhile(message => message["Event"] != "EndpointListComplete")
+              .Do(message =>
+                  Console.Out.WriteLine(
+                    $"~~~ \"{message["ObjectName"]}\" ({message["DeviceState"]}) ~~~"));
+        }
+
+        // We're done, so let's be a good client and use the Logoff()
+        // helper function...
+
+        if(!await client.Logoff())
+        {
+          Console.Out.WriteLine("Logoff failed");
+          return;
+        }
+      }
+    }
+  }
 }
 ```
 
@@ -489,6 +514,15 @@ public sealed class AmiClient : IDisposable, IObservable<AmiMessage>
    // lifecycle management
 
    public async Task<Task> Start(Stream stream);
+
+   public void Stop();
+
+   public sealed class LifecycleEventArgs : EventArgs
+   {
+       public readonly Exception Exception;
+   }
+
+   public event EventHandler<LifecycleEventArgs> Stopped;
 
    // AMI protocol helpers
 
