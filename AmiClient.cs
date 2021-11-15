@@ -137,43 +137,46 @@ namespace Ami
 
         private Byte[] readBuffer = new Byte[0];
 
-        private IEnumerable<Byte[]> LineObserver()
+        private IEnumerable<Byte[]> lineObserver
         {
-            while(true)
+            get
             {
                 while(true)
                 {
-                    var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
-                    if(crlfPos < 0)
+                    while(true)
                     {
-                        break;
+                        var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
+                        if(crlfPos < 0)
+                        {
+                            break;
+                        }
+
+                        var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
+                        this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
+
+                        yield return line;
                     }
 
-                    var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
-                    this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
-
-                    yield return line;
-                }
-
-                try
-                {
-                    var bytes = new Byte[4096];
-
-                    var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-                    if(nrBytes == 0)
+                    try
                     {
-                        yield break; // EOF
+                        var bytes = new Byte[4096];
+
+                        var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
+                        if(nrBytes == 0)
+                        {
+                            yield break; // EOF
+                        }
+
+                        this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
+
+                        this.DataReceived?.Invoke(this, new DataEventArgs(bytes.Slice(0, nrBytes)));
                     }
-
-                    this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
-
-                    this.DataReceived?.Invoke(this, new DataEventArgs(bytes.Slice(0, nrBytes)));
-                }
-                catch(SocketException ex)
-                {
-                    if(ex.SocketErrorCode != SocketError.Interrupted && ex.SocketErrorCode != SocketError.TimedOut)
+                    catch(SocketException ex)
                     {
-                        throw;
+                        if(ex.SocketErrorCode != SocketError.Interrupted && ex.SocketErrorCode != SocketError.TimedOut)
+                        {
+                            throw;
+                        }
                     }
                 }
             }
@@ -185,7 +188,7 @@ namespace Ami
         {
             try
             {
-                var lineObserver = this.LineObserver().ToObservable();
+                var lineObserver = this.lineObserver.ToObservable();
 
                 var handshake = await lineObserver.Take(1);
 
