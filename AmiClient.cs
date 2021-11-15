@@ -34,45 +34,6 @@ namespace Ami
     {
         private Stream stream;
 
-        public Stream Stream
-        {
-            get => this.stream;
-
-            set
-            {
-                if(this.stream != null)
-                {
-                    throw new ArgumentException("\"Stream\" property has already been set", nameof(value));
-                }
-
-                if(!value.CanRead)
-                {
-                    throw new ArgumentException("stream does not support reading", nameof(value));
-                }
-
-                if(!value.CanWrite)
-                {
-                    throw new ArgumentException("stream does not support writing", nameof(value));
-                }
-
-                this.stream = value;
-
-                Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
-
-                var oneSecondFromNow = DateTimeOffset.Now.AddSeconds(1);
-
-                while(!this.processing && DateTimeOffset.Now < oneSecondFromNow)
-                {
-                    Thread.Yield();
-                }
-
-                if(!this.processing)
-                {
-                    throw new AmiException("could not exchange the AMI protocol banner");
-                }
-            }
-        }
-
         private readonly ConcurrentDictionary<IObserver<AmiMessage>, Subscription> observers;
 
         private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight;
@@ -89,16 +50,59 @@ namespace Ami
                 StringComparer.OrdinalIgnoreCase);
         }
 
+        [Obsolete("use Start() method")]
         public AmiClient(Stream stream) : this()
         {
             this.Stream = stream;
+        }
+
+        [Obsolete("use Start() method")]
+        public Stream Stream
+        {
+            get => this.stream;
+            set
+            {
+                var task = this.Start(value);
+                task.Wait();
+            }
+        }
+
+        public async Task<Task> Start(Stream stream)
+        {
+            if(this.stream != null)
+            {
+                throw new AmiException("client has already been started");
+            }
+
+            if(!stream.CanRead)
+            {
+                throw new ArgumentException("stream does not support reading", nameof(stream));
+            }
+
+            if(!stream.CanWrite)
+            {
+                throw new ArgumentException("stream does not support writing", nameof(stream));
+            }
+
+            this.stream = stream;
+
+            try
+            {
+                await this.lineObserver.ToObservable().Take(1);
+            }
+            catch (Exception ex)
+            {
+                throw new AmiException("protocol handshake failed (is this an Asterisk server?)", ex);
+            }
+
+            return Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
         }
 
         public async Task<AmiMessage> Publish(AmiMessage action)
         {
             if(this.stream == null)
             {
-                throw new InvalidOperationException("\"Stream\" property has not been set");
+                throw new InvalidOperationException("client has not been started");
             }
 
             try
@@ -186,21 +190,12 @@ namespace Ami
 
         private async Task WorkerMain()
         {
+            this.processing = true;
+
+            var lineObserver = this.lineObserver.ToObservable();
+
             try
             {
-                var lineObserver = this.lineObserver.ToObservable();
-
-                var handshake = await lineObserver.Take(1);
-
-                this.DataReceived?.Invoke(this, new DataEventArgs(handshake));
-
-                this.processing = true;
-
-                if(String.IsNullOrEmpty(Encoding.UTF8.GetString(handshake)))
-                {
-                    throw new AmiException("protocol handshake failed (is this an Asterisk server?)");
-                }
-
                 while(this.processing)
                 {
                     var payload = new Byte[0];
@@ -208,8 +203,6 @@ namespace Ami
                     await lineObserver
                           .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
                           .Do(line => payload = payload.Append(line));
-
-                    this.DataReceived?.Invoke(this, new DataEventArgs(payload));
 
                     var message = AmiMessage.FromBytes(payload);
 

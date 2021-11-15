@@ -95,23 +95,22 @@ namespace Playground
    {
      public static async Task Main(String[] args)
      {
-       // To make testing possible, an AmiClient accepts any Stream object
-       // that is readable and writable. This means that the user is
-       // responsible for maintaining a TCP connection to the AMI server.
-
-       // It's actually pretty easy...
-
        using(var socket = new TcpClient(hostname: "127.0.0.1", port: 5038))
-       using(var client = new AmiClient(socket.GetStream()))
+       using(var client = new AmiClient())
        {
-         // At this point, we've completed the AMI protocol handshake and
-         // a background I/O Task is consuming data from the socket.
-
          // Activity on the wire can be observed and logged using the
          // DataSent and DataReceived events...
 
          client.DataSent += (s, e) => Console.Error.Write(e.Data);
          client.DataReceived += (s, e) => Console.Error.Write(e.Data);
+
+         // To make testing possible, the user is expected to provide
+         // AmiClient with a Stream object that is readable and writable.
+
+         await client.Start(socket.GetStream());
+
+         // At this point, we've completed the AMI protocol handshake and
+         // a background I/O Task is consuming data from the socket.
 
          // First, let's authenticate using the Login() helper function...
 
@@ -448,8 +447,6 @@ Message: Thanks for all the fish.
 ```csharp
 public sealed class AmiMessage : IEnumerable<KeyValuePair<String, String>>
 {
-   // creation
-
    public AmiMessage();
 
    public DateTimeOffset Timestamp { get; }
@@ -487,13 +484,11 @@ public sealed class AmiMessage : IEnumerable<KeyValuePair<String, String>>
 
 public sealed class AmiClient : IDisposable, IObservable<AmiMessage>
 {
-   // creation
-
    public AmiClient();
 
-   public AmiClient(Stream stream);
+   // lifecycle management
 
-   public Stream Stream { get; set; } 
+   public async Task<Task> Start(Stream stream);
 
    // AMI protocol helpers
 
