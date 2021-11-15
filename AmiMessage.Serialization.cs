@@ -1,4 +1,4 @@
-/* Copyright © 2019 Alex Forster. All rights reserved.
+/* Copyright © Alex Forster. All rights reserved.
  * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,84 +16,85 @@
 
 namespace Ami
 {
-	using System;
-	using System.IO;
-	using System.Text;
-	using System.Collections;
-	using System.Collections.Generic;
-	using System.Linq;
+    using System;
+    using System.IO;
+    using System.Text;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Linq;
 
-	using ByteArrayExtensions;
+    using ByteArrayExtensions;
 
-	public sealed partial class AmiMessage
-	{
-		internal static readonly Byte[] TerminatorBytes = { 0x0d, 0x0a };
-		internal static readonly Char[] TerminatorChars = { '\x0d', '\x0a' };
+    public sealed partial class AmiMessage
+    {
+        internal static readonly Byte[] TerminatorBytes = { 0x0d, 0x0a };
 
-		public static AmiMessage FromBytes(Byte[] bytes)
-		{
-			var result = new AmiMessage();
+        internal static readonly Char[] TerminatorChars = { '\x0d', '\x0a' };
 
-			for(var nrLine = 1;; nrLine++)
-			{
-				var crlfPos = bytes.Find(AmiMessage.TerminatorBytes, 0, bytes.Length);
+        public static AmiMessage FromBytes(Byte[] bytes)
+        {
+            var result = new AmiMessage();
 
-				if(crlfPos == -1)
-				{
-					throw new ArgumentException($"unexpected end of message after {nrLine} line(s)", nameof(bytes));
-				}
+            for(var nrLine = 1;; nrLine++)
+            {
+                var crlfPos = bytes.Find(AmiMessage.TerminatorBytes, 0, bytes.Length);
 
-				var line = Encoding.UTF8.GetString(bytes.Slice(0, crlfPos));
-				bytes = bytes.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
+                if(crlfPos == -1)
+                {
+                    throw new ArgumentException($"unexpected end of message after {nrLine} line(s)", nameof(bytes));
+                }
 
-				if(line.Equals(String.Empty))
-				{
-					break; // empty line terminates
-				}
+                var line = Encoding.UTF8.GetString(bytes.Slice(0, crlfPos));
+                bytes = bytes.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
 
-				var kvp = line.Split(new[] { ':' }, 2);
+                if(line.Equals(String.Empty))
+                {
+                    break; // empty line terminates
+                }
 
-				if(kvp.Length != 2)
-				{
-					throw new ArgumentException($"malformed field on line {nrLine}", nameof(bytes));
-				}
+                var kvp = line.Split(new[] { ':' }, 2);
 
-				result.Add(kvp[0], kvp[1]);
-			}
+                if(kvp.Length != 2)
+                {
+                    throw new ArgumentException($"malformed field on line {nrLine}", nameof(bytes));
+                }
 
-			return result;
-		}
+                result.Add(kvp[0], kvp[1]);
+            }
 
-		public static AmiMessage FromString(String @string)
-		{
-			var bytes = Encoding.UTF8.GetBytes(@string);
+            return result;
+        }
 
-			return AmiMessage.FromBytes(bytes);
-		}
+        public static AmiMessage FromString(String @string)
+        {
+            var bytes = Encoding.UTF8.GetBytes(@string);
 
-		public Byte[] ToBytes()
-		{
-			var stream = new MemoryStream();
+            return AmiMessage.FromBytes(bytes);
+        }
 
-			using(var writer = new StreamWriter(stream, new UTF8Encoding(false)))
-			{
-				foreach(var field in this.Fields)
-				{
-					writer.Write(field.Key);
-					writer.Write(": ");
-					writer.Write(field.Value);
-					writer.Write(AmiMessage.TerminatorChars);
-				}
+        public Byte[] ToBytes()
+        {
+            var stream = new MemoryStream();
 
-				writer.Write(AmiMessage.TerminatorChars);
-			}
+            using(var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+            {
+                foreach(var field in this.Fields)
+                {
+                    writer.Write(field.Key);
+                    writer.Write(": ");
+                    writer.Write(field.Value);
+                    writer.Write(AmiMessage.TerminatorChars);
+                }
 
-			return stream.ToArray();
-		}
+                writer.Write(AmiMessage.TerminatorChars);
+            }
 
-		public override String ToString()
-		{
-			return Encoding.UTF8.GetString(this.ToBytes());
-		}
-	}
+            return stream.ToArray();
+        }
+
+        public override String ToString()
+        {
+            return Encoding.UTF8.GetString(this.ToBytes());
+        }
+    }
 }

@@ -1,4 +1,4 @@
-/* Copyright © 2019 Alex Forster. All rights reserved.
+/* Copyright © Alex Forster. All rights reserved.
  * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,87 +16,87 @@
 
 namespace Ami
 {
-	using System;
-	using System.IO;
-	using System.Text;
-	using System.Collections.Generic;
-	using System.Collections.Concurrent;
-	using System.Threading;
-	using System.Threading.Tasks;
-	using System.Linq;
-	using System.Reactive.Linq;
-	using System.Security.Cryptography;
+    using System;
+    using System.IO;
+    using System.Text;
+    using System.Collections.Generic;
+    using System.Collections.Concurrent;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Linq;
+    using System.Reactive.Linq;
+    using System.Security.Cryptography;
 
-	using ByteArrayExtensions;
+    using ByteArrayExtensions;
 
-	public sealed partial class AmiClient : IDisposable, IObservable<AmiMessage>
-	{
-		private void Dispatch(AmiMessage message)
-		{
-			foreach(var observer in this.observers.Keys)
-			{
-				observer.OnNext(message);
-			}
-		}
+    public sealed partial class AmiClient : IDisposable, IObservable<AmiMessage>
+    {
+        private void Dispatch(AmiMessage message)
+        {
+            foreach(var observer in this.observers.Keys)
+            {
+                observer.OnNext(message);
+            }
+        }
 
-		private void Dispatch(Exception exception)
-		{
-			foreach(var observer in this.observers.Keys)
-			{
-				observer.OnError(exception);
+        private void Dispatch(Exception exception)
+        {
+            foreach(var observer in this.observers.Keys)
+            {
+                observer.OnError(exception);
 
-				this.Unsubscribe(observer);
-			}
-		}
+                this.Unsubscribe(observer);
+            }
+        }
 
-		public IDisposable Subscribe(IObserver<AmiMessage> observer)
-		{
-			if(observer == null)
-			{
-				throw new ArgumentNullException(nameof(observer));
-			}
+        public IDisposable Subscribe(IObserver<AmiMessage> observer)
+        {
+            if(observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
 
-			return this.observers.GetOrAdd(observer, _ => new Subscription(this, observer));
-		}
+            return this.observers.GetOrAdd(observer, _ => new Subscription(this, observer));
+        }
 
-		public void Unsubscribe(IObserver<AmiMessage> observer)
-		{
-			if(observer == null)
-			{
-				throw new ArgumentNullException(nameof(observer));
-			}
+        public void Unsubscribe(IObserver<AmiMessage> observer)
+        {
+            if(observer == null)
+            {
+                throw new ArgumentNullException(nameof(observer));
+            }
 
-			this.observers.TryRemove(observer, out _);
-		}
+            this.observers.TryRemove(observer, out _);
+        }
 
-		public void Dispose()
-		{
-			foreach(var observer in this.observers.Keys)
-			{
-				observer.OnCompleted();
+        public void Dispose()
+        {
+            foreach(var observer in this.observers.Keys)
+            {
+                observer.OnCompleted();
 
-				this.Unsubscribe(observer);
-			}
+                this.Unsubscribe(observer);
+            }
 
-			this.processing = false;
-		}
+            this.processing = false;
+        }
 
-		private sealed class Subscription : IDisposable
-		{
-			private readonly AmiClient client;
+        private sealed class Subscription : IDisposable
+        {
+            private readonly AmiClient client;
 
-			private readonly IObserver<AmiMessage> observer;
+            private readonly IObserver<AmiMessage> observer;
 
-			internal Subscription(AmiClient client, IObserver<AmiMessage> observer)
-			{
-				this.client = client;
-				this.observer = observer;
-			}
+            internal Subscription(AmiClient client, IObserver<AmiMessage> observer)
+            {
+                this.client = client;
+                this.observer = observer;
+            }
 
-			public void Dispose()
-			{
-				this.client.Unsubscribe(this.observer);
-			}
-		}
-	}
+            public void Dispose()
+            {
+                this.client.Unsubscribe(this.observer);
+            }
+        }
+    }
 }

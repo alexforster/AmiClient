@@ -7,7 +7,7 @@
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>asterisk asterisk-ami asterisk-pbx voip sip csharp csharp-library netstandard netcore</PackageTags>
-    <Copyright>Copyright © 2019 Alex Forster</Copyright>
+    <Copyright>Copyright © Alex Forster</Copyright>
     <Description>Asterisk Management Interface (AMI) client library for .NET</Description>
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsPackable>true</IsPackable>

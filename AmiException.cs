@@ -1,4 +1,4 @@
-/* Copyright © 2019 Alex Forster. All rights reserved.
+/* Copyright © Alex Forster. All rights reserved.
  * https://github.com/alexforster/AmiClient/
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
