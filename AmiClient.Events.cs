@@ -35,10 +35,16 @@ namespace Ami
         public sealed class DataEventArgs : EventArgs
         {
             public readonly Byte[] Data;
+            public readonly AmiMessage AmiMessage;
 
             internal DataEventArgs(Byte[] data)
             {
                 this.Data = data;
+            }
+            
+            internal DataEventArgs(AmiMessage amiMessage)
+            {
+                this.AmiMessage = amiMessage;
             }
         }
 

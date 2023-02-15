@@ -36,6 +36,10 @@ namespace Ami
 
         private readonly ConcurrentDictionary<String, TaskCompletionSource<AmiMessage>> inFlight;
 
+        private readonly ConcurrentQueue<string?> eventQueue;
+
+        private readonly CancellationTokenSource cancellationTokenSource;
+
         public AmiClient()
         {
             this.observers = new ConcurrentDictionary<IObserver<AmiMessage>, Subscription>(
@@ -46,28 +50,15 @@ namespace Ami
                 Environment.ProcessorCount,
                 16384,
                 StringComparer.OrdinalIgnoreCase);
+
+            this.eventQueue = new ConcurrentQueue<string>();
+
+            this.cancellationTokenSource = new CancellationTokenSource();
         }
 
-        private Stream stream;
+        private NetworkStream stream;
 
-        [Obsolete("use Start() method")]
-        public AmiClient(Stream stream) : this()
-        {
-            this.Stream = stream;
-        }
-
-        [Obsolete("use Start() method")]
-        public Stream Stream
-        {
-            get => this.stream;
-            set
-            {
-                var task = this.Start(value);
-                task.Wait();
-            }
-        }
-
-        public async Task<Task> Start(Stream stream)
+        public Task Start(NetworkStream stream)
         {
             if(this.stream != null)
             {
@@ -86,16 +77,10 @@ namespace Ami
 
             this.stream = stream;
 
-            try
-            {
-                await this.lineObserver.ToObservable().Take(1);
-            }
-            catch (Exception ex)
-            {
-                throw new AmiException("protocol handshake failed (is this an Asterisk server?)", ex);
-            }
-
-            return Task.Factory.StartNew(this.WorkerMain, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(EventReader, TaskCreationOptions.LongRunning);
+            Task.Factory.StartNew(EventWorker, TaskCreationOptions.LongRunning);
+            
+            return Task.CompletedTask;
         }
 
         public void Stop()
@@ -139,6 +124,7 @@ namespace Ami
             }
 
             this.stream = null;
+            cancellationTokenSource.Cancel();
 
             this.Stopped?.Invoke(this, new LifecycleEventArgs(ex));
         }
@@ -186,93 +172,55 @@ namespace Ami
             }
         }
 
-        private Byte[] readBuffer = new Byte[0];
-
-        private IEnumerable<Byte[]> lineObserver
+        private async Task EventReader()
         {
-            get
-            {
-                while(true)
-                {
-                    while(true)
-                    {
-                        var crlfPos = this.readBuffer.Find(AmiMessage.TerminatorBytes, 0, this.readBuffer.Length);
-                        if(crlfPos < 0)
-                        {
-                            break;
-                        }
-
-                        var line = this.readBuffer.Slice(0, crlfPos + AmiMessage.TerminatorBytes.Length);
-                        this.readBuffer = this.readBuffer.Slice(crlfPos + AmiMessage.TerminatorBytes.Length);
-
-                        yield return line;
-                    }
-
-                    try
-                    {
-                        var bytes = new Byte[4096];
-
-                        var nrBytes = this.stream.Read(bytes, 0, bytes.Length);
-                        if(nrBytes == 0)
-                        {
-                            yield break; // EOF
-                        }
-
-                        this.readBuffer = this.readBuffer.Append(bytes.Slice(0, nrBytes));
-
-                        this.DataReceived?.Invoke(this, new DataEventArgs(bytes.Slice(0, nrBytes)));
-                    }
-                    catch(SocketException ex)
-                    {
-                        if(ex.SocketErrorCode != SocketError.Interrupted && ex.SocketErrorCode != SocketError.TimedOut)
-                        {
-                            throw;
-                        }
-                    }
-                }
+            var bufferStream = new BufferedStream(stream);
+            var reader = new StreamReader(bufferStream);
+        
+            while (!cancellationTokenSource.Token.IsCancellationRequested) {
+                var line = await reader.ReadLineAsync();
+                eventQueue.Enqueue(line);
             }
         }
 
-        private async Task WorkerMain()
-        {
-            var lineObserver = this.lineObserver.ToObservable();
-
-            try
-            {
-                while(this.stream != null)
-                {
-                    var payload = new Byte[0];
-
-                    await lineObserver
-                          .TakeUntil(line => line.SequenceEqual(AmiMessage.TerminatorBytes))
-                          .Do(line => payload = payload.Append(line))
-                          .DefaultIfEmpty();
-
-                    if(payload.Length == 0)
-                    {
+        private Task EventWorker() {
+            while (!cancellationTokenSource.Token.IsCancellationRequested) {
+                var messageBuilder = new StringBuilder();
+        
+                while (true) {
+                    if (!eventQueue.TryDequeue(out var line)) {
+                        continue;
+                    }
+        
+                    if (string.IsNullOrEmpty(line)) {
+                        messageBuilder.Append("\r\n");
                         break;
                     }
 
-                    var message = AmiMessage.FromBytes(payload);
-
-                    if(message.Fields.FirstOrDefault().Key == "Response" &&
-                       this.inFlight.TryGetValue(message["ActionID"], out var tcs))
-                    {
-                        tcs.SetResult(message);
+                    if (line.Contains("Asterisk Call Manager")) {
+                        continue;
                     }
-                    else
-                    {
-                        this.Dispatch(message);
-                    }
+                    
+                    messageBuilder.AppendLine(line);
                 }
+        
+                var message = messageBuilder.ToString();
+        
+                if (string.IsNullOrEmpty(message)) {
+                    continue;
+                }
+ 
+                var parsedMessage = AmiMessage.FromString(message);
+                
+                if(parsedMessage.Fields.FirstOrDefault().Key == "Response" && this.inFlight.TryGetValue(parsedMessage["ActionID"], out var tcs))
+                {
+                    tcs.SetResult(parsedMessage);
+                }
+                
+                this.DataReceived?.Invoke(this, new DataEventArgs(parsedMessage));
             }
-            catch(Exception ex)
-            {
-                this.Stop(ex);
-                return;
-            }
-
-            this.Stop();
+        
+            return Task.CompletedTask;
         }
     }
 }
