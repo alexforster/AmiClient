@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+using System.Globalization;
+
 namespace Ami
 {
     using System;
@@ -90,7 +92,7 @@ namespace Ami
 
                 if(key.Equals("Timestamp", StringComparison.OrdinalIgnoreCase))
                 {
-                    if(Double.TryParse(value, out var seconds))
+                    if(Double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var seconds))
                     {
                         var dt = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
                         this.Timestamp = dt.AddSeconds(seconds);
